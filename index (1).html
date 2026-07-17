@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Searah Chemical Injection Engineering Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2300649D'/%3E%3Ctext x='16' y='22' font-family='Arial' font-weight='800' font-size='14' fill='white' text-anchor='middle'%3ESC%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="loader-overlay">
+  <div class="loader-card">
+    <div class="spinner" id="loader-spinner"></div>
+    <div id="loader-msg" style="font-weight:700;font-size:15px;">Loading chemical usage workbook…</div>
+    <div id="loader-detail" style="font-size:12.5px;color:#6B7A87;margin-top:6px;">Reading <code>data/ChemicalUsage.xlsx</code></div>
+    <div id="loader-upload" style="display:none;">
+      <div class="loader-err" id="loader-err">Could not auto-load the workbook from <code>data/ChemicalUsage.xlsx</code>.</div>
+      <div class="drop-zone" id="drop-zone">
+        <div><b>Drop the Excel workbook here</b>, or click to browse.</div>
+        <div style="margin-top:4px;">Accepts the source <code>.xlsx</code> chemical usage file. All figures are read directly from the file — nothing is estimated.</div>
+      </div>
+      <input type="file" id="file-input" accept=".xlsx" style="display:none;">
+    </div>
+  </div>
+</div>
+
+<div id="app" style="display:none;">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h1 class="page-title" id="page-title">Executive Summary</h1>
+        <div class="page-sub" id="page-sub"></div>
+      </div>
+      <div class="topbar-spacer"></div>
+      <div class="filter-bar" id="filter-bar"></div>
+    </div>
+    <div class="content" id="page-content"></div>
+    <div class="footer-note">Searah Chemical Injection Engineering Dashboard · All KPIs, charts, and AI insights are derived directly from the source workbook. No values are estimated, interpolated, or fabricated.</div>
+  </div>
+</div>
+
+<script src="js/engine.js"></script>
+<script src="js/app.js"></script>
+<script src="js/pages.js"></script>
+<script>
+const DATA_URL = 'data/ChemicalUsage.xlsx';
+
+async function boot() {
+  // Resolve relative to this document's own URL, and defeat any stale
+  // GitHub Pages / browser cache with a cache-busting query param.
+  const url = new URL(DATA_URL, document.baseURI).href + '?v=' + Date.now();
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}`);
+    const buf = await res.arrayBuffer();
+    if (!buf.byteLength) throw new Error(`${url} responded but the file is empty (0 bytes)`);
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    loadWorkbook(wb);
+    initApp();
+  } catch (e) {
+    console.error('Auto-load of workbook failed:', e);
+    showUploadFallback(e, url);
+  }
+}
+
+function showUploadFallback(err, url) {
+  document.getElementById('loader-spinner').style.display = 'none';
+  document.getElementById('loader-msg').textContent = 'Workbook not auto-loaded';
+  document.getElementById('loader-detail').style.display = 'none';
+  document.getElementById('loader-upload').style.display = 'block';
+  const errEl = document.getElementById('loader-err');
+  if (err) {
+    errEl.innerHTML = `Could not auto-load the workbook.<br>
+      <span style="font-family:monospace;font-size:11px;">${(err.message || err).toString().replace(/</g,'&lt;')}</span><br>
+      Tried: <a href="${url}" target="_blank" style="font-family:monospace;font-size:11px;">${url}</a> — open that link directly; if it 404s, <code>data/ChemicalUsage.xlsx</code> isn't at that exact (case-sensitive) path in your repository.`;
+  }
+
+  const dz = document.getElementById('drop-zone');
+  const fi = document.getElementById('file-input');
+  dz.addEventListener('click', () => fi.click());
+  fi.addEventListener('change', () => { if (fi.files[0]) handleFile(fi.files[0]); });
+  ['dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag'); }));
+  ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag'); }));
+  dz.addEventListener('drop', e => { if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+}
+
+function handleFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+      loadWorkbook(wb);
+      initApp();
+    } catch (err) {
+      document.getElementById('loader-err').textContent = 'Could not parse this file as a valid Excel workbook: ' + err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+boot();
+</script>
+</body>
+</html>
